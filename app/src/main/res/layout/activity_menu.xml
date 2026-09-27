@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1A1A1A"
+    android:gravity="center"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="♔ ChessBox ♚"
+        android:textColor="#FFC107"
+        android:textSize="44sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="60dp" />
+
+    <Button
+        android:id="@+id/btnTwoPlayers"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="👥  ИГРАТЬ ВДВОЁМ"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2E7D32"
+        android:padding="20dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnVsComputer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🤖  ПРОТИВ КОМПЬЮТЕРА"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#1565C0"
+        android:padding="20dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnLan"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🌐  ИГРА ПО LAN"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#6A1B9A"
+        android:padding="20dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚙️  НАСТРОЙКИ"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#555555"
+        android:padding="20dp" />
+
+</LinearLayout>

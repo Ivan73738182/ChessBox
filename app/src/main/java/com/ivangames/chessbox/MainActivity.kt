@@ -1,6 +1,5 @@
 package com.ivangames.chessbox
 
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -25,11 +24,17 @@ class MainActivity : AppCompatActivity() {
         winOverlay = findViewById(R.id.winOverlay)
         winText = findViewById(R.id.winText)
 
-        // Спрашиваем режим при запуске
-        showModeDialog()
+        val mode = intent.getStringExtra("mode") ?: "two_players"
+        chessBoard.vsComputer = (mode == "vs_computer")
+
+        statusText.text = if (chessBoard.vsComputer) "Вы играете белыми" else "Ход: белые"
 
         chessBoard.onTurnChanged = { isWhiteTurn ->
-            statusText.text = if (isWhiteTurn) "Ход: белые" else "Ход: чёрные"
+            if (chessBoard.vsComputer) {
+                statusText.text = if (isWhiteTurn) "Ваш ход" else "Компьютер думает..."
+            } else {
+                statusText.text = if (isWhiteTurn) "Ход: белые" else "Ход: чёрные"
+            }
         }
 
         chessBoard.onCheck = {
@@ -53,33 +58,16 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.resetBtn).setOnClickListener {
             chessBoard.resetGame()
-            statusText.text = "Ход: белые"
             winOverlay.visibility = View.GONE
+            statusText.text = if (chessBoard.vsComputer) "Ваш ход" else "Ход: белые"
         }
 
         findViewById<Button>(R.id.newGameBtn).setOnClickListener {
-            chessBoard.resetGame()
-            statusText.text = "Ход: белые"
-            winOverlay.visibility = View.GONE
-            showModeDialog()
+            finish()  // вернуться в меню
         }
-    }
 
-    private fun showModeDialog() {
-        val options = arrayOf("👥 Играть вдвоём", "🤖 Против компьютера")
-        AlertDialog.Builder(this)
-            .setTitle("Режим игры")
-            .setItems(options) { _, which ->
-                if (which == 0) {
-                    chessBoard.vsComputer = false
-                    statusText.text = "Ход: белые"
-                } else {
-                    chessBoard.vsComputer = true
-                    statusText.text = "Ход: белые"
-                }
-                chessBoard.resetGame()
-            }
-            .setCancelable(false)
-            .show()
+        findViewById<Button>(R.id.newGameBtn2).setOnClickListener {
+            finish()  // вернуться в меню
+        }
     }
 }
