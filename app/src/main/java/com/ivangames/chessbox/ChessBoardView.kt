@@ -25,10 +25,15 @@ class ChessBoardView @JvmOverloads constructor(
 
     private var whiteTurn = true
     private var kingInCheck = false
+    private var gameOver = false
 
     // ИИ
-    var vsComputer = false       // включить игру против компьютера
-    var aiThinking = false       // блокировка тапов, пока ИИ думает
+    var vsComputer = false
+    var aiThinking = false
+
+    // Сеть
+    var networkMode = false
+    var myTurnIsWhite = true
 
     // Рокировка
     private var whiteKingMoved = false
@@ -117,6 +122,9 @@ class ChessBoardView @JvmOverloads constructor(
     var onCheckmate: ((Boolean) -> Unit)? = null
     var onStalemate: (() -> Unit)? = null
 
+    // Колбэк: игрок сделал ход (для отправки по сети)
+    var onMoveMade: ((Int, Int, Int, Int) -> Unit)? = null
+
     init {
         setupInitialPosition()
     }
@@ -145,6 +153,7 @@ class ChessBoardView @JvmOverloads constructor(
         selectedCol = -1
         possibleMoves.clear()
         aiThinking = false
+        gameOver = false
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -154,8 +163,6 @@ class ChessBoardView @JvmOverloads constructor(
         boardLeft = (w - cellSize * boardSize) / 2f
         boardTop = (h - cellSize * boardSize) / 2f
     }
-
-    // ============ УТИЛИТЫ ============
 
     private fun isOwnPiece(piece: Char?, white: Boolean): Boolean {
         if (piece == null) return false
@@ -370,7 +377,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
 // ============ ИИ ============
 
-// Найти лучший ход для стороны (white)
 fun findBestMove(white: Boolean): Triple<Int, Int, Int>? {
     val allMoves = mutableListOf<MoveWithScore>()
     for (row in 0 until boardSize) {
@@ -385,43 +391,27 @@ fun findBestMove(white: Boolean): Triple<Int, Int, Int>? {
         }
     }
     if (allMoves.isEmpty()) return null
-
-    // Если ходы ведут к мату — выбираем лучший
     val best = allMoves.maxByOrNull { it.score } ?: return null
     return Triple(best.fromRow, best.fromCol, best.toRow shl 8 or best.toCol)
 }
 
-// Оценка хода: чем больше, тем лучше
 private fun evaluateMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int, white: Boolean): Int {
     var score = 0
     val target = board[toRow][toCol]
     val piece = board[fromRow][fromCol] ?: return 0
 
-    // Съедание фигуры
-    if (target != null) {
-        score += pieceValue(target) * 10
-    }
-
-    // Взятие на проходе
+    if (target != null) score += pieceValue(target) * 10
     if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null) {
         score += pieceValue(if (white) 'p' else 'P') * 10
     }
-
-    // Продвижение пешки
     if (piece.uppercaseChar() == 'P') {
         val advance = if (white) (fromRow - toRow) else (toRow - fromRow)
         score += advance * 5
-        // Превращение
         if ((white && toRow == 0) || (!white && toRow == 7)) score += 800
     }
-
-    // Центр
     if (toRow in 3..4 && toCol in 3..4) score += 3
-
-    // Рокировка
     if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) score += 15
 
-    // Проверяем, ставит ли ход шах
     val savedTarget = board[toRow][toCol]
     val savedFrom = board[fromRow][fromCol]
     board[toRow][toCol] = piece
@@ -433,9 +423,7 @@ private fun evaluateMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int, whi
     board[toRow][toCol] = savedTarget
     board[fromRow][fromCol] = savedFrom
 
-    // Небольшая случайность, чтобы ИИ не был слишком предсказуемым
     score += Random.nextInt(-2, 3)
-
     return score
 }
 
@@ -448,7 +436,6 @@ data class MoveWithScore(
     val score: Int
 )
 
-// Сделать ход ИИ
 fun makeAIMove() {
     if (!vsComputer || whiteTurn) return
     aiThinking = true
@@ -460,7 +447,7 @@ fun makeAIMove() {
         val toRow = packed shr 8
         val toCol = packed and 0xFF
         saveHistory()
-        makeMove(fromRow, fromCol, toRow, toCol)
+        makeMoveInternal(fromRow, fromCol, toRow, toCol)
         updateCheckState()
     }
     aiThinking = false
@@ -548,6 +535,12 @@ fun makeAIMove() {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action != MotionEvent.ACTION_DOWN) return true
         if (aiThinking) return true
+        if (gameOver) return true
+
+        // В сетевом режиме ходим только когда наш ход
+        if (networkMode && whiteTurn != myTurnIsWhite) return true
+
+        // В режиме ИИ ходим только белыми
         if (vsComputer && !whiteTurn) return true
 
         val col = ((event.x - boardLeft) / cellSize).toInt()
@@ -560,14 +553,22 @@ fun makeAIMove() {
         if (selectedRow != -1) {
             if (possibleMoves.contains(row to col)) {
                 saveHistory()
-                makeMove(selectedRow, selectedCol, row, col)
+                val isNetworkMove = networkMode
+                makeMoveInternal(selectedRow, selectedCol, row, col)
+                val fromR = selectedRow
+                val fromC = selectedCol
                 selectedRow = -1
                 selectedCol = -1
                 possibleMoves.clear()
                 updateCheckState()
                 invalidate()
 
-                // Если игра против компьютера — запускаем ход ИИ
+                // Отправляем ход по сети
+                if (isNetworkMove) {
+                    onMoveMade?.invoke(fromR, fromC, row, col)
+                }
+
+                // Запускаем ИИ
                 if (vsComputer && !whiteTurn && !gameOver) {
                     postDelayed({ makeAIMove() }, 400)
                 }
@@ -597,15 +598,25 @@ fun makeAIMove() {
         return true
     }
 
-    // ============ СДЕЛАТЬ ХОД ============
+    // ============ СЕТЕВЫЕ МЕТОДЫ ============
 
-    private var gameOver = false
+    // Сделать ход, полученный по сети (без отправки обратно)
+    fun makeMoveFromNetwork(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
+        saveHistory()
+        makeMoveInternal(fromRow, fromCol, toRow, toCol)
+        selectedRow = -1
+        selectedCol = -1
+        possibleMoves.clear()
+        updateCheckState()
+        invalidate()
+    }
 
-    private fun makeMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
+    // ============ ВНУТРЕННИЙ ХОД ============
+
+    private fun makeMoveInternal(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
         val piece = board[fromRow][fromCol] ?: return
         val target = board[toRow][toCol]
 
-        // Рокировка
         if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) {
             if (toCol > fromCol) {
                 board[toRow][toCol - 1] = board[fromRow][7]
@@ -616,7 +627,6 @@ fun makeAIMove() {
             }
         }
 
-        // Взятие на проходе
         if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null
             && toRow == enPassantRow && toCol == enPassantCol) {
             board[fromRow][toCol] = null
@@ -656,18 +666,12 @@ fun makeAIMove() {
         kingInCheck = if (kingPos == null) false
         else isSquareAttackedBy(kingPos.first, kingPos.second, !white)
 
-        if (kingInCheck) {
-            onCheck?.invoke()
-        }
+        if (kingInCheck) onCheck?.invoke()
 
-        // Проверяем мат / пат
         if (!hasAnyLegalMove(white)) {
             gameOver = true
-            if (kingInCheck) {
-                onCheckmate?.invoke(white)
-            } else {
-                onStalemate?.invoke()
-            }
+            if (kingInCheck) onCheckmate?.invoke(white)
+            else onStalemate?.invoke()
         }
     }
 

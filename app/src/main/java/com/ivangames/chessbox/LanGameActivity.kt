@@ -7,60 +7,89 @@ import androidx.appcompat.app.AppCompatActivity
 
 class LanGameActivity : AppCompatActivity() {
 
+    private lateinit var chessBoard: ChessBoardView
+    private lateinit var statusText: TextView
+    private var isHost = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_lan_game)
 
+        chessBoard = findViewById(R.id.lanChessBoard)
+        statusText = findViewById(R.id.lanStatus)
+
         val role = intent.getStringExtra("role") ?: "host"
         val hostIp = intent.getStringExtra("hostIp") ?: ""
-        val statusText = findViewById<TextView>(R.id.lanStatus)
+        isHost = (role == "host")
 
-        if (role == "host") {
-            statusText.text = "Создаю игру..."
+        // Настраиваем доску: кто играет каким цветом
+        chessBoard.myTurnIsWhite = isHost
+        chessBoard.networkMode = true
+        chessBoard.vsComputer = false
+
+        statusText.text = if (isHost) "Вы играете белыми" else "Вы играете чёрными"
+
+        // Когда игрок сделал ход — отправляем по сети
+        chessBoard.onMoveMade = { fromRow, fromCol, toRow, toCol ->
+            val message = "$fromRow,$fromCol,$toRow,$toCol"
+            NetworkManager.sendMessage(message)
+        }
+
+        // Когда пришло сообщение — делаем ход на нашей доске
+        NetworkManager.onMessageReceived = { message ->
+            runOnUiThread {
+                val parts = message.split(",")
+                if (parts.size == 4) {
+                    try {
+                        val fromRow = parts[0].toInt()
+                        val fromCol = parts[1].toInt()
+                        val toRow = parts[2].toInt()
+                        val toCol = parts[3].toInt()
+                        chessBoard.makeMoveFromNetwork(fromRow, fromCol, toRow, toCol)
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Ошибка хода: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        // Подключение / запуск сервера
+        if (isHost) {
+            statusText.text = "Запускаю сервер..."
             NetworkManager.startServer { ip ->
                 runOnUiThread {
-                    statusText.text = "Ваш IP: $ip\n\nОжидаю подключения клиента..."
+                    statusText.text = "Ваш IP: $ip\nОжидаю соперника..."
                 }
             }
         } else {
             statusText.text = "Подключаюсь к $hostIp..."
             NetworkManager.connectToServer(hostIp,
                 onSuccess = {
-                    runOnUiThread {
-                        statusText.text = "Подключено!"
-                        Toast.makeText(this, "Успешно подключено!", Toast.LENGTH_SHORT).show()
-                    }
+                    runOnUiThread { statusText.text = "Вы играете чёрными" }
                 },
                 onFail = { error ->
-                    runOnUiThread {
-                        statusText.text = "Ошибка: $error"
-                        Toast.makeText(this, error, Toast.LENGTH_LONG).show()
-                    }
+                    runOnUiThread { statusText.text = "Ошибка: $error" }
                 }
             )
         }
 
         NetworkManager.onConnected = {
             runOnUiThread {
-                statusText.text = "Соединение установлено!\nСкоро здесь будет игра."
+                statusText.text = if (isHost) "Вы играете белыми — ваш ход" else "Вы играете чёрными — ждём ход белых"
             }
         }
 
         NetworkManager.onDisconnected = {
             runOnUiThread {
                 statusText.text = "Соединение потеряно"
-            }
-        }
-
-        NetworkManager.onMessageReceived = { message ->
-            runOnUiThread {
-                Toast.makeText(this, "Получено: $message", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Соперник отключился", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        NetworkManager.disconnect()
+        try { NetworkManager.disconnect() } catch (e: Exception) {}
     }
 }
+
