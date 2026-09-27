@@ -16,7 +16,6 @@ class ChessBoardView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private val boardSize = 8
-
     private var board: Array<Array<Char?>> = Array(boardSize) { Array(boardSize) { null } }
 
     private var selectedRow = -1
@@ -27,15 +26,11 @@ class ChessBoardView @JvmOverloads constructor(
     private var kingInCheck = false
     private var gameOver = false
 
-    // ИИ
     var vsComputer = false
     var aiThinking = false
-
-    // Сеть
     var networkMode = false
     var myTurnIsWhite = true
 
-    // Рокировка
     private var whiteKingMoved = false
     private var blackKingMoved = false
     private var whiteRookLeftMoved = false
@@ -43,30 +38,40 @@ class ChessBoardView @JvmOverloads constructor(
     private var blackRookLeftMoved = false
     private var blackRookRightMoved = false
 
-    // Взятие на проходе
     private var enPassantRow = -1
     private var enPassantCol = -1
 
-    // История
-    data class MoveSnapshot(
-        val board: Array<Array<Char?>>,
-        val whiteTurn: Boolean,
-        val whiteKingMoved: Boolean,
-        val blackKingMoved: Boolean,
-        val whiteRookLeftMoved: Boolean,
-        val whiteRookRightMoved: Boolean,
-        val blackRookLeftMoved: Boolean,
-        val blackRookRightMoved: Boolean,
-        val enPassantRow: Int,
-        val enPassantCol: Int
-    )
-    private val history = mutableListOf<MoveSnapshot>()
+    // ===== АНИМАЦИЯ =====
+    private var animPiece: Char? = null
+    private var lastMovePiece: Char? = null
+    private var animFromRow = -1
+    private var animFromCol = -1
+    private var animToRow = -1
+    private var animToCol = -1
+    private var animProgress = 0f
+    private var animActive = false
 
+    // Последний ход
+    private var lastMoveFromRow = -1
+    private var lastMoveFromCol = -1
+    private var lastMoveToRow = -1
+    private var lastMoveToCol = -1
+
+    // Пульс шаха
+    private var checkPulse = 0f
+    private var checkPulseDirection = 1f
+
+    // Превращение пешки
+    private var promoteRow = -1
+    private var promoteCol = -1
+    private var promoteAnimTimer = 0
+
+    // ===== РАЗМЕРЫ =====
     private var cellSize = 0f
     private var boardLeft = 0f
     private var boardTop = 0f
 
-    // Краски
+    // ===== КРАСКИ =====
     private val lightCellPaint = Paint().apply {
         color = Color.parseColor("#F0D9B5")
         style = Paint.Style.FILL
@@ -75,15 +80,13 @@ class ChessBoardView @JvmOverloads constructor(
         color = Color.parseColor("#B58863")
         style = Paint.Style.FILL
     }
-    private val selectedPaint = Paint().apply {
-        color = Color.parseColor("#FFEB3B")
+    private val lastMovePaint = Paint().apply {
+        color = Color.parseColor("#80FFEB3B")
         style = Paint.Style.FILL
-        alpha = 180
     }
-    private val checkPaint = Paint().apply {
-        color = Color.parseColor("#FF0000")
+    private val selectedPaint = Paint().apply {
+        color = Color.parseColor("#80FF9800")
         style = Paint.Style.FILL
-        alpha = 150
     }
     private val moveDotPaint = Paint().apply {
         color = Color.parseColor("#66AAAAAA")
@@ -106,7 +109,7 @@ class ChessBoardView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
         typeface = Typeface.DEFAULT_BOLD
-        setShadowLayer(4f, 0f, 2f, Color.parseColor("#66000000"))
+        setShadowLayer(6f, 0f, 3f, Color.parseColor("#88000000"))
     }
     private val blackPiecePaint = Paint().apply {
         color = Color.BLACK
@@ -114,15 +117,19 @@ class ChessBoardView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
         typeface = Typeface.DEFAULT_BOLD
-        setShadowLayer(4f, 0f, 2f, Color.parseColor("#66000000"))
+        setShadowLayer(6f, 0f, 3f, Color.parseColor("#88000000"))
+    }
+    private val promoteFlashPaint = Paint().apply {
+        color = Color.WHITE
+        style = Paint.Style.FILL
+        isAntiAlias = true
     }
 
+    // ===== КОЛБЭКИ =====
     var onTurnChanged: ((Boolean) -> Unit)? = null
     var onCheck: (() -> Unit)? = null
     var onCheckmate: ((Boolean) -> Unit)? = null
     var onStalemate: (() -> Unit)? = null
-
-    // Колбэк: игрок сделал ход (для отправки по сети)
     var onMoveMade: ((Int, Int, Int, Int) -> Unit)? = null
 
     init {
@@ -148,12 +155,18 @@ class ChessBoardView @JvmOverloads constructor(
         enPassantRow = -1
         enPassantCol = -1
         kingInCheck = false
-        history.clear()
         selectedRow = -1
         selectedCol = -1
         possibleMoves.clear()
         aiThinking = false
         gameOver = false
+        animActive = false
+        lastMoveFromRow = -1
+        lastMoveFromCol = -1
+        lastMoveToRow = -1
+        lastMoveToCol = -1
+        promoteAnimTimer = 0
+        history.clear()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -229,6 +242,21 @@ class ChessBoardView @JvmOverloads constructor(
         }
         return true
     }
+
+    private val history = mutableListOf<MoveSnapshot>()
+
+    data class MoveSnapshot(
+        val board: Array<Array<Char?>>,
+        val whiteTurn: Boolean,
+        val whiteKingMoved: Boolean,
+        val blackKingMoved: Boolean,
+        val whiteRookLeftMoved: Boolean,
+        val whiteRookRightMoved: Boolean,
+        val blackRookLeftMoved: Boolean,
+        val blackRookRightMoved: Boolean,
+        val enPassantRow: Int,
+        val enPassantCol: Int
+    )
 // ============ ГЕНЕРАЦИЯ ХОДОВ ============
 
 private fun getMovesFor(row: Int, col: Int): MutableList<Pair<Int, Int>> {
@@ -447,12 +475,101 @@ fun makeAIMove() {
         val toRow = packed shr 8
         val toCol = packed and 0xFF
         saveHistory()
+        // ИИ сначала делает логический ход, потом анимация
         makeMoveInternal(fromRow, fromCol, toRow, toCol)
-        updateCheckState()
+        startMoveAnimation(fromRow, fromCol, toRow, toCol, true)
     }
     aiThinking = false
     invalidate()
 }
+    // ============ ХОД + АНИМАЦИЯ ============
+
+    // Делает логический ход (меняет доску), НЕ трогает UI-колбэки
+    private fun makeMoveInternal(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
+        val piece = board[fromRow][fromCol] ?: return
+        val target = board[toRow][toCol]
+
+        // Рокировка
+        if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) {
+            if (toCol > fromCol) {
+                board[toRow][toCol - 1] = board[fromRow][7]
+                board[fromRow][7] = null
+            } else {
+                board[toRow][toCol + 1] = board[fromRow][0]
+                board[fromRow][0] = null
+            }
+        }
+
+        // Взятие на проходе
+        if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null
+            && toRow == enPassantRow && toCol == enPassantCol) {
+            board[fromRow][toCol] = null
+        }
+
+        if (piece == 'K') whiteKingMoved = true
+        if (piece == 'k') blackKingMoved = true
+        if (piece == 'R' && fromRow == 7 && fromCol == 0) whiteRookLeftMoved = true
+        if (piece == 'R' && fromRow == 7 && fromCol == 7) whiteRookRightMoved = true
+        if (piece == 'r' && fromRow == 0 && fromCol == 0) blackRookLeftMoved = true
+        if (piece == 'r' && fromRow == 0 && fromCol == 7) blackRookRightMoved = true
+
+        enPassantRow = -1
+        enPassantCol = -1
+        if (piece == 'P' && fromRow == 6 && toRow == 4) {
+            enPassantRow = 5; enPassantCol = fromCol
+        }
+        if (piece == 'p' && fromRow == 1 && toRow == 3) {
+            enPassantRow = 2; enPassantCol = fromCol
+        }
+
+        board[toRow][toCol] = piece
+        board[fromRow][fromCol] = null
+
+        if (piece == 'P' && toRow == 0) {
+            board[toRow][toCol] = 'Q'
+            promoteRow = toRow; promoteCol = toCol; promoteAnimTimer = 20
+        }
+        if (piece == 'p' && toRow == 7) {
+            board[toRow][toCol] = 'q'
+            promoteRow = toRow; promoteCol = toCol; promoteAnimTimer = 20
+        }
+
+        lastMoveFromRow = fromRow
+        lastMoveFromCol = fromCol
+        lastMoveToRow = toRow
+        lastMoveToCol = toCol
+
+        whiteTurn = !whiteTurn
+    }
+
+    // Запускает визуальную анимацию (не меняет доску!)
+    private fun startMoveAnimation(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int, pieceWasCaptured: Boolean) {
+        animPiece = lastMovePiece
+        animFromRow = fromRow
+        animFromCol = fromCol
+        animToRow = toRow
+        animToCol = toCol
+        animProgress = 0f
+        animActive = true
+    }
+
+    private var lastMovePiece: Char? = null
+
+    // Вызывается, когда анимация дошла до конца
+    private fun onAnimationComplete() {
+        animActive = false
+        animPiece = null
+        // Колбэки — через post, чтобы не во время onDraw
+        post {
+            updateCheckState()
+            onTurnChanged?.invoke(whiteTurn)
+            if (vsComputer && !whiteTurn && !gameOver) {
+                postDelayed({ makeAIMove() }, 300)
+            }
+            invalidate()
+        }
+    }
+
     // ============ РИСОВАНИЕ ============
 
     override fun onDraw(canvas: Canvas) {
@@ -460,6 +577,7 @@ fun makeAIMove() {
 
         canvas.drawColor(Color.parseColor("#1A1A1A"))
 
+        // Доска
         for (row in 0 until boardSize) {
             for (col in 0 until boardSize) {
                 val left = boardLeft + col * cellSize
@@ -470,21 +588,38 @@ fun makeAIMove() {
                 val paint = if ((row + col) % 2 == 0) lightCellPaint else darkCellPaint
                 canvas.drawRect(left, top, right, bottom, paint)
 
+                if ((row == lastMoveFromRow && col == lastMoveFromCol) ||
+                    (row == lastMoveToRow && col == lastMoveToCol)) {
+                    canvas.drawRect(left, top, right, bottom, lastMovePaint)
+                }
+
                 if (row == selectedRow && col == selectedCol) {
                     canvas.drawRect(left, top, right, bottom, selectedPaint)
                 }
             }
         }
 
+        // Пульс шаха
         if (kingInCheck) {
             val kingPos = findKing(whiteTurn)
             if (kingPos != null) {
+                checkPulse += checkPulseDirection * 0.05f
+                if (checkPulse >= 1f) { checkPulse = 1f; checkPulseDirection = -1f }
+                if (checkPulse <= 0f) { checkPulse = 0f; checkPulseDirection = 1f }
+
                 val left = boardLeft + kingPos.second * cellSize
                 val top = boardTop + kingPos.first * cellSize
-                canvas.drawRect(left, top, left + cellSize, top + cellSize, checkPaint)
+
+                val pulsePaint = Paint().apply {
+                    color = Color.RED
+                    style = Paint.Style.FILL
+                    alpha = (60 + 100 * checkPulse).toInt()
+                }
+                canvas.drawRect(left, top, left + cellSize, top + cellSize, pulsePaint)
             }
         }
 
+        // Точки возможных ходов
         for ((r, c) in possibleMoves) {
             val cx = boardLeft + c * cellSize + cellSize / 2f
             val cy = boardTop + r * cellSize + cellSize / 2f
@@ -494,11 +629,45 @@ fun makeAIMove() {
             canvas.drawCircle(cx, cy, radius, paint)
         }
 
+        // Фигуры (кроме анимируемой стартовой позиции)
         for (row in 0 until boardSize) {
             for (col in 0 until boardSize) {
+                if (animActive && row == animToRow && col == animToCol) continue
                 val piece = board[row][col] ?: continue
                 drawPiece(canvas, row, col, piece)
             }
+        }
+
+        // Анимируемая фигура
+        if (animActive && animPiece != null) {
+            val startX = boardLeft + animFromCol * cellSize
+            val startY = boardTop + animFromRow * cellSize
+            val endX = boardLeft + animToCol * cellSize
+            val endY = boardTop + animToRow * cellSize
+
+            val x = startX + (endX - startX) * animProgress
+            val y = startY + (endY - startY) * animProgress
+
+            drawPieceAbsolute(canvas, animPiece!!, x, y)
+
+            animProgress += 0.15f
+            if (animProgress >= 1f) {
+                animProgress = 1f
+                onAnimationComplete()
+                return
+            }
+            invalidate()
+        }
+
+        // Превращение пешки
+        if (promoteAnimTimer > 0) {
+            val left = boardLeft + promoteCol * cellSize
+            val top = boardTop + promoteRow * cellSize
+            val alpha = (promoteAnimTimer / 20f * 255).toInt().coerceIn(0, 255)
+            promoteFlashPaint.alpha = alpha
+            canvas.drawRect(left, top, left + cellSize, top + cellSize, promoteFlashPaint)
+            promoteAnimTimer--
+            invalidate()
         }
 
         canvas.drawRect(
@@ -520,6 +689,16 @@ fun makeAIMove() {
         canvas.drawText(symbol, cx, cy, paint)
     }
 
+    private fun drawPieceAbsolute(canvas: Canvas, piece: Char, x: Float, y: Float) {
+        val symbol = getPieceSymbol(piece)
+        val isWhite = piece.isUpperCase()
+        val paint = if (isWhite) whitePiecePaint else blackPiecePaint
+        paint.textSize = cellSize * 0.75f
+        val cx = x + cellSize / 2f
+        val cy = y + cellSize / 2f - (paint.descent() + paint.ascent()) / 2f
+        canvas.drawText(symbol, cx, cy, paint)
+    }
+
     private fun getPieceSymbol(piece: Char): String {
         return when (piece) {
             'K' -> "\u2654"; 'Q' -> "\u2655"; 'R' -> "\u2656"
@@ -530,17 +709,14 @@ fun makeAIMove() {
         }
     }
 
-    // ============ ОБРАБОТКА ТАПА ============
+    // ============ ТАП ============
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action != MotionEvent.ACTION_DOWN) return true
         if (aiThinking) return true
         if (gameOver) return true
-
-        // В сетевом режиме ходим только когда наш ход
+        if (animActive) return true
         if (networkMode && whiteTurn != myTurnIsWhite) return true
-
-        // В режиме ИИ ходим только белыми
         if (vsComputer && !whiteTurn) return true
 
         val col = ((event.x - boardLeft) / cellSize).toInt()
@@ -553,25 +729,22 @@ fun makeAIMove() {
         if (selectedRow != -1) {
             if (possibleMoves.contains(row to col)) {
                 saveHistory()
-                val isNetworkMove = networkMode
-                makeMoveInternal(selectedRow, selectedCol, row, col)
                 val fromR = selectedRow
                 val fromC = selectedCol
                 selectedRow = -1
                 selectedCol = -1
                 possibleMoves.clear()
-                updateCheckState()
+
+                lastMovePiece = board[fromR][fromC]
+
+                // Логический ход + анимация
+                makeMoveInternal(fromR, fromC, row, col)
+                startMoveAnimation(fromR, fromC, row, col, false)
+
+                // Отправляем по сети
+                if (networkMode) onMoveMade?.invoke(fromR, fromC, row, col)
+
                 invalidate()
-
-                // Отправляем ход по сети
-                if (isNetworkMove) {
-                    onMoveMade?.invoke(fromR, fromC, row, col)
-                }
-
-                // Запускаем ИИ
-                if (vsComputer && !whiteTurn && !gameOver) {
-                    postDelayed({ makeAIMove() }, 400)
-                }
                 return true
             }
             if (isOwnPiece(piece, whiteTurn)) {
@@ -598,64 +771,14 @@ fun makeAIMove() {
         return true
     }
 
-    // ============ СЕТЕВЫЕ МЕТОДЫ ============
+    // ============ СЕТЬ ============
 
-    // Сделать ход, полученный по сети (без отправки обратно)
     fun makeMoveFromNetwork(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
         saveHistory()
+        lastMovePiece = board[fromRow][fromCol]
         makeMoveInternal(fromRow, fromCol, toRow, toCol)
-        selectedRow = -1
-        selectedCol = -1
-        possibleMoves.clear()
-        updateCheckState()
+        startMoveAnimation(fromRow, fromCol, toRow, toCol, false)
         invalidate()
-    }
-
-    // ============ ВНУТРЕННИЙ ХОД ============
-
-    private fun makeMoveInternal(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
-        val piece = board[fromRow][fromCol] ?: return
-        val target = board[toRow][toCol]
-
-        if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) {
-            if (toCol > fromCol) {
-                board[toRow][toCol - 1] = board[fromRow][7]
-                board[fromRow][7] = null
-            } else {
-                board[toRow][toCol + 1] = board[fromRow][0]
-                board[fromRow][0] = null
-            }
-        }
-
-        if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null
-            && toRow == enPassantRow && toCol == enPassantCol) {
-            board[fromRow][toCol] = null
-        }
-
-        if (piece == 'K') whiteKingMoved = true
-        if (piece == 'k') blackKingMoved = true
-        if (piece == 'R' && fromRow == 7 && fromCol == 0) whiteRookLeftMoved = true
-        if (piece == 'R' && fromRow == 7 && fromCol == 7) whiteRookRightMoved = true
-        if (piece == 'r' && fromRow == 0 && fromCol == 0) blackRookLeftMoved = true
-        if (piece == 'r' && fromRow == 0 && fromCol == 7) blackRookRightMoved = true
-
-        enPassantRow = -1
-        enPassantCol = -1
-        if (piece == 'P' && fromRow == 6 && toRow == 4) {
-            enPassantRow = 5; enPassantCol = fromCol
-        }
-        if (piece == 'p' && fromRow == 1 && toRow == 3) {
-            enPassantRow = 2; enPassantCol = fromCol
-        }
-
-        board[toRow][toCol] = piece
-        board[fromRow][fromCol] = null
-
-        if (piece == 'P' && toRow == 0) board[toRow][toCol] = 'Q'
-        if (piece == 'p' && toRow == 7) board[toRow][toCol] = 'q'
-
-        whiteTurn = !whiteTurn
-        onTurnChanged?.invoke(whiteTurn)
     }
 
     // ============ ШАХ / МАТ ============
@@ -722,6 +845,11 @@ fun makeAIMove() {
         selectedCol = -1
         possibleMoves.clear()
         gameOver = false
+        animActive = false
+        lastMoveFromRow = -1
+        lastMoveFromCol = -1
+        lastMoveToRow = -1
+        lastMoveToCol = -1
         updateCheckState()
         onTurnChanged?.invoke(whiteTurn)
         invalidate()
