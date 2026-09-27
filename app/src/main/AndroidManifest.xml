@@ -5,11 +5,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
-<activity
-    android:name=".LanGameActivity"
-    android:exported="false"
-    android:screenOrientation="portrait" />
-
     <application
         android:allowBackup="true"
         android:label="ChessBox"
@@ -33,6 +28,11 @@
 
         <activity
             android:name=".LanActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".LanGameActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 
