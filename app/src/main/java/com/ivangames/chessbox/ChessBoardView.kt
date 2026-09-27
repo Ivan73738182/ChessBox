@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.random.Random
 
 class ChessBoardView @JvmOverloads constructor(
     context: Context,
@@ -23,11 +24,13 @@ class ChessBoardView @JvmOverloads constructor(
     private var possibleMoves: MutableList<Pair<Int, Int>> = mutableListOf()
 
     private var whiteTurn = true
-
-    // Для шаха / мата
     private var kingInCheck = false
 
-    // Для рокировки: двигался ли король / ладья
+    // ИИ
+    var vsComputer = false       // включить игру против компьютера
+    var aiThinking = false       // блокировка тапов, пока ИИ думает
+
+    // Рокировка
     private var whiteKingMoved = false
     private var blackKingMoved = false
     private var whiteRookLeftMoved = false
@@ -35,11 +38,11 @@ class ChessBoardView @JvmOverloads constructor(
     private var blackRookLeftMoved = false
     private var blackRookRightMoved = false
 
-    // Для взятия на проходе: клетка, где можно взять (row, col) или -1
+    // Взятие на проходе
     private var enPassantRow = -1
     private var enPassantCol = -1
 
-    // История ходов для отмены
+    // История
     data class MoveSnapshot(
         val board: Array<Array<Char?>>,
         val whiteTurn: Boolean,
@@ -54,7 +57,6 @@ class ChessBoardView @JvmOverloads constructor(
     )
     private val history = mutableListOf<MoveSnapshot>()
 
-    // Размеры
     private var cellSize = 0f
     private var boardLeft = 0f
     private var boardTop = 0f
@@ -112,13 +114,14 @@ class ChessBoardView @JvmOverloads constructor(
 
     var onTurnChanged: ((Boolean) -> Unit)? = null
     var onCheck: (() -> Unit)? = null
-    var onCheckmate: ((Boolean) -> Unit)? = null // true = победили белые
+    var onCheckmate: ((Boolean) -> Unit)? = null
+    var onStalemate: (() -> Unit)? = null
 
     init {
         setupInitialPosition()
     }
 
-    private fun setupInitialPosition() {
+    fun setupInitialPosition() {
         for (row in 0 until boardSize) for (col in 0 until boardSize) board[row][col] = null
         board[0][0] = 'r'; board[0][1] = 'n'; board[0][2] = 'b'; board[0][3] = 'q'
         board[0][4] = 'k'; board[0][5] = 'b'; board[0][6] = 'n'; board[0][7] = 'r'
@@ -138,6 +141,10 @@ class ChessBoardView @JvmOverloads constructor(
         enPassantCol = -1
         kingInCheck = false
         history.clear()
+        selectedRow = -1
+        selectedCol = -1
+        possibleMoves.clear()
+        aiThinking = false
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -163,7 +170,6 @@ class ChessBoardView @JvmOverloads constructor(
     private fun inBounds(row: Int, col: Int): Boolean =
         row in 0 until boardSize && col in 0 until boardSize
 
-    // Поиск короля
     private fun findKing(white: Boolean): Pair<Int, Int>? {
         val target = if (white) 'K' else 'k'
         for (row in 0 until boardSize) {
@@ -174,29 +180,26 @@ class ChessBoardView @JvmOverloads constructor(
         return null
     }
 
-    // Атакована ли клетка фигурами врага
     private fun isSquareAttackedBy(row: Int, col: Int, byWhite: Boolean): Boolean {
         for (r in 0 until boardSize) {
             for (c in 0 until boardSize) {
                 val piece = board[r][c] ?: continue
                 if (piece.isUpperCase() != byWhite) continue
-                // Атакует ли эта фигура клетку (row, col)
                 if (attacks(r, c, piece, row, col)) return true
             }
         }
         return false
     }
 
-    // Атакует ли фигура из (r, c) клетку (tr, tc)
     private fun attacks(r: Int, c: Int, piece: Char, tr: Int, tc: Int): Boolean {
         val white = piece.isUpperCase()
         val dr = tr - r
         val dc = tc - c
 
         return when (piece.uppercaseChar()) {
-            'R' -> (dr == 0 || dc == 0) && pathClear(r, c, tr, tc)
-            'B' -> (Math.abs(dr) == Math.abs(dc)) && pathClear(r, c, tr, tc)
-            'Q' -> ((dr == 0 || dc == 0) || (Math.abs(dr) == Math.abs(dc))) && pathClear(r, c, tr, tc)
+            'R' -> (dr == 0 || dc == 0) && (dr != 0 || dc != 0) && pathClear(r, c, tr, tc)
+            'B' -> (Math.abs(dr) == Math.abs(dc)) && dr != 0 && pathClear(r, c, tr, tc)
+            'Q' -> ((dr == 0 || dc == 0) || (Math.abs(dr) == Math.abs(dc))) && (dr != 0 || dc != 0) && pathClear(r, c, tr, tc)
             'N' -> (Math.abs(dr) == 2 && Math.abs(dc) == 1) || (Math.abs(dr) == 1 && Math.abs(dc) == 2)
             'K' -> Math.abs(dr) <= 1 && Math.abs(dc) <= 1 && (dr != 0 || dc != 0)
             'P' -> {
@@ -240,18 +243,17 @@ private fun getMovesFor(row: Int, col: Int): MutableList<Pair<Int, Int>> {
         'P' -> addPawnMoves(moves, row, col, piece)
     }
 
-    // Фильтр: убираем ходы, после которых свой король под шахом
     val white = piece.isUpperCase()
     val legalMoves = mutableListOf<Pair<Int, Int>>()
     for ((r, c) in moves) {
-        val saved = board[r][c]
+        val savedTarget = board[r][c]
         val savedFrom = board[row][col]
         board[r][c] = piece
         board[row][col] = null
         val kingPos = findKing(white)
         val stillSafe = if (kingPos == null) true
         else !isSquareAttackedBy(kingPos.first, kingPos.second, !white)
-        board[r][c] = saved
+        board[r][c] = savedTarget
         board[row][col] = savedFrom
         if (stillSafe) legalMoves.add(r to c)
     }
@@ -302,36 +304,22 @@ private fun addKingMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 private fun addCastlingMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int, piece: Char) {
     val white = piece.isUpperCase()
     if (white && row == 7 && col == 4 && !whiteKingMoved) {
-        // Короткая рокировка (правая ладья)
-        if (!whiteRookRightMoved && board[7][5] == null && board[7][6] == null
-            && board[7][7] == 'R'
-            && !isSquareAttackedBy(7, 4, false)
-            && !isSquareAttackedBy(7, 5, false)
-            && !isSquareAttackedBy(7, 6, false)) {
+        if (!whiteRookRightMoved && board[7][5] == null && board[7][6] == null && board[7][7] == 'R'
+            && !isSquareAttackedBy(7, 4, false) && !isSquareAttackedBy(7, 5, false) && !isSquareAttackedBy(7, 6, false)) {
             moves.add(7 to 6)
         }
-        // Длинная рокировка (левая ладья)
-        if (!whiteRookLeftMoved && board[7][1] == null && board[7][2] == null && board[7][3] == null
-            && board[7][0] == 'R'
-            && !isSquareAttackedBy(7, 4, false)
-            && !isSquareAttackedBy(7, 3, false)
-            && !isSquareAttackedBy(7, 2, false)) {
+        if (!whiteRookLeftMoved && board[7][1] == null && board[7][2] == null && board[7][3] == null && board[7][0] == 'R'
+            && !isSquareAttackedBy(7, 4, false) && !isSquareAttackedBy(7, 3, false) && !isSquareAttackedBy(7, 2, false)) {
             moves.add(7 to 2)
         }
     }
     if (!white && row == 0 && col == 4 && !blackKingMoved) {
-        if (!blackRookRightMoved && board[0][5] == null && board[0][6] == null
-            && board[0][7] == 'r'
-            && !isSquareAttackedBy(0, 4, true)
-            && !isSquareAttackedBy(0, 5, true)
-            && !isSquareAttackedBy(0, 6, true)) {
+        if (!blackRookRightMoved && board[0][5] == null && board[0][6] == null && board[0][7] == 'r'
+            && !isSquareAttackedBy(0, 4, true) && !isSquareAttackedBy(0, 5, true) && !isSquareAttackedBy(0, 6, true)) {
             moves.add(0 to 6)
         }
-        if (!blackRookLeftMoved && board[0][1] == null && board[0][2] == null && board[0][3] == null
-            && board[0][0] == 'r'
-            && !isSquareAttackedBy(0, 4, true)
-            && !isSquareAttackedBy(0, 3, true)
-            && !isSquareAttackedBy(0, 2, true)) {
+        if (!blackRookLeftMoved && board[0][1] == null && board[0][2] == null && board[0][3] == null && board[0][0] == 'r'
+            && !isSquareAttackedBy(0, 4, true) && !isSquareAttackedBy(0, 3, true) && !isSquareAttackedBy(0, 2, true)) {
             moves.add(0 to 2)
         }
     }
@@ -374,11 +362,109 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             if (target != null && isEnemyPiece(target, white)) {
                 moves.add(r to c)
             } else if (target == null && r == enPassantRow && c == enPassantCol) {
-                // Взятие на проходе
                 moves.add(r to c)
             }
         }
     }
+}
+
+// ============ ИИ ============
+
+// Найти лучший ход для стороны (white)
+fun findBestMove(white: Boolean): Triple<Int, Int, Int>? {
+    val allMoves = mutableListOf<MoveWithScore>()
+    for (row in 0 until boardSize) {
+        for (col in 0 until boardSize) {
+            val piece = board[row][col] ?: continue
+            if (piece.isUpperCase() != white) continue
+            val moves = getMovesFor(row, col)
+            for ((tr, tc) in moves) {
+                val score = evaluateMove(row, col, tr, tc, white)
+                allMoves.add(MoveWithScore(row, col, tr, tc, score))
+            }
+        }
+    }
+    if (allMoves.isEmpty()) return null
+
+    // Если ходы ведут к мату — выбираем лучший
+    val best = allMoves.maxByOrNull { it.score } ?: return null
+    return Triple(best.fromRow, best.fromCol, best.toRow shl 8 or best.toCol)
+}
+
+// Оценка хода: чем больше, тем лучше
+private fun evaluateMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int, white: Boolean): Int {
+    var score = 0
+    val target = board[toRow][toCol]
+    val piece = board[fromRow][fromCol] ?: return 0
+
+    // Съедание фигуры
+    if (target != null) {
+        score += pieceValue(target) * 10
+    }
+
+    // Взятие на проходе
+    if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null) {
+        score += pieceValue(if (white) 'p' else 'P') * 10
+    }
+
+    // Продвижение пешки
+    if (piece.uppercaseChar() == 'P') {
+        val advance = if (white) (fromRow - toRow) else (toRow - fromRow)
+        score += advance * 5
+        // Превращение
+        if ((white && toRow == 0) || (!white && toRow == 7)) score += 800
+    }
+
+    // Центр
+    if (toRow in 3..4 && toCol in 3..4) score += 3
+
+    // Рокировка
+    if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) score += 15
+
+    // Проверяем, ставит ли ход шах
+    val savedTarget = board[toRow][toCol]
+    val savedFrom = board[fromRow][fromCol]
+    board[toRow][toCol] = piece
+    board[fromRow][fromCol] = null
+    val enemyKing = findKing(!white)
+    if (enemyKing != null && isSquareAttackedBy(enemyKing.first, enemyKing.second, white)) {
+        score += 50
+    }
+    board[toRow][toCol] = savedTarget
+    board[fromRow][fromCol] = savedFrom
+
+    // Небольшая случайность, чтобы ИИ не был слишком предсказуемым
+    score += Random.nextInt(-2, 3)
+
+    return score
+}
+
+private fun pieceValue(piece: Char): Int = when (piece.uppercaseChar()) {
+    'P' -> 1; 'N' -> 3; 'B' -> 3; 'R' -> 5; 'Q' -> 9; 'K' -> 100; else -> 0
+}
+
+data class MoveWithScore(
+    val fromRow: Int, val fromCol: Int, val toRow: Int, val toCol: Int,
+    val score: Int
+)
+
+// Сделать ход ИИ
+fun makeAIMove() {
+    if (!vsComputer || whiteTurn) return
+    aiThinking = true
+    val move = findBestMove(false)
+    if (move != null) {
+        val fromRow = move.first
+        val fromCol = move.second
+        val packed = move.third
+        val toRow = packed shr 8
+        val toCol = packed and 0xFF
+        saveHistory()
+        makeMove(fromRow, fromCol, toRow, toCol)
+        updateCheckState()
+    }
+    aiThinking = false
+    invalidate()
 }
     // ============ РИСОВАНИЕ ============
 
@@ -387,7 +473,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
         canvas.drawColor(Color.parseColor("#1A1A1A"))
 
-        // Клетки
         for (row in 0 until boardSize) {
             for (col in 0 until boardSize) {
                 val left = boardLeft + col * cellSize
@@ -404,7 +489,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             }
         }
 
-        // Подсветка короля под шахом
         if (kingInCheck) {
             val kingPos = findKing(whiteTurn)
             if (kingPos != null) {
@@ -414,7 +498,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             }
         }
 
-        // Точки возможных ходов
         for ((r, c) in possibleMoves) {
             val cx = boardLeft + c * cellSize + cellSize / 2f
             val cy = boardTop + r * cellSize + cellSize / 2f
@@ -424,7 +507,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             canvas.drawCircle(cx, cy, radius, paint)
         }
 
-        // Фигуры
         for (row in 0 until boardSize) {
             for (col in 0 until boardSize) {
                 val piece = board[row][col] ?: continue
@@ -432,7 +514,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             }
         }
 
-        // Рамка
         canvas.drawRect(
             boardLeft, boardTop,
             boardLeft + cellSize * boardSize,
@@ -444,14 +525,11 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
     private fun drawPiece(canvas: Canvas, row: Int, col: Int, piece: Char) {
         val symbol = getPieceSymbol(piece)
         val isWhite = piece.isUpperCase()
-
         val paint = if (isWhite) whitePiecePaint else blackPiecePaint
         paint.textSize = cellSize * 0.75f
-
         val cx = boardLeft + col * cellSize + cellSize / 2f
         val cy = boardTop + row * cellSize + cellSize / 2f -
                 (paint.descent() + paint.ascent()) / 2f
-
         canvas.drawText(symbol, cx, cy, paint)
     }
 
@@ -469,6 +547,8 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action != MotionEvent.ACTION_DOWN) return true
+        if (aiThinking) return true
+        if (vsComputer && !whiteTurn) return true
 
         val col = ((event.x - boardLeft) / cellSize).toInt()
         val row = ((event.y - boardTop) / cellSize).toInt()
@@ -486,6 +566,11 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
                 possibleMoves.clear()
                 updateCheckState()
                 invalidate()
+
+                // Если игра против компьютера — запускаем ход ИИ
+                if (vsComputer && !whiteTurn && !gameOver) {
+                    postDelayed({ makeAIMove() }, 400)
+                }
                 return true
             }
             if (isOwnPiece(piece, whiteTurn)) {
@@ -514,6 +599,8 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
     // ============ СДЕЛАТЬ ХОД ============
 
+    private var gameOver = false
+
     private fun makeMove(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) {
         val piece = board[fromRow][fromCol] ?: return
         val target = board[toRow][toCol]
@@ -521,11 +608,9 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
         // Рокировка
         if (piece.uppercaseChar() == 'K' && Math.abs(toCol - fromCol) == 2) {
             if (toCol > fromCol) {
-                // Короткая
                 board[toRow][toCol - 1] = board[fromRow][7]
                 board[fromRow][7] = null
             } else {
-                // Длинная
                 board[toRow][toCol + 1] = board[fromRow][0]
                 board[fromRow][0] = null
             }
@@ -534,10 +619,9 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
         // Взятие на проходе
         if (piece.uppercaseChar() == 'P' && toCol != fromCol && target == null
             && toRow == enPassantRow && toCol == enPassantCol) {
-            board[fromRow][toCol] = null // удаляем съеденную пешку
+            board[fromRow][toCol] = null
         }
 
-        // Обновляем флаги движения короля / ладьи
         if (piece == 'K') whiteKingMoved = true
         if (piece == 'k') blackKingMoved = true
         if (piece == 'R' && fromRow == 7 && fromCol == 0) whiteRookLeftMoved = true
@@ -545,7 +629,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
         if (piece == 'r' && fromRow == 0 && fromCol == 0) blackRookLeftMoved = true
         if (piece == 'r' && fromRow == 0 && fromCol == 7) blackRookRightMoved = true
 
-        // Устанавливаем en passant для следующего хода
         enPassantRow = -1
         enPassantCol = -1
         if (piece == 'P' && fromRow == 6 && toRow == 4) {
@@ -555,15 +638,12 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
             enPassantRow = 2; enPassantCol = fromCol
         }
 
-        // Двигаем фигуру
         board[toRow][toCol] = piece
         board[fromRow][fromCol] = null
 
-        // Превращение пешки
         if (piece == 'P' && toRow == 0) board[toRow][toCol] = 'Q'
         if (piece == 'p' && toRow == 7) board[toRow][toCol] = 'q'
 
-        // Меняем ход
         whiteTurn = !whiteTurn
         onTurnChanged?.invoke(whiteTurn)
     }
@@ -578,14 +658,15 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
         if (kingInCheck) {
             onCheck?.invoke()
-            // Проверяем мат: есть ли хоть один легальный ход у стороны, чей ход
-            if (!hasAnyLegalMove(white)) {
-                onCheckmate?.invoke(white) // true = проиграли белые, false = проиграли чёрные
-            }
-        } else {
-            // Проверяем пат (нет ходов, но нет шаха)
-            if (!hasAnyLegalMove(white)) {
-                onCheckmate?.invoke(white) // будем считать патом тоже конец игры
+        }
+
+        // Проверяем мат / пат
+        if (!hasAnyLegalMove(white)) {
+            gameOver = true
+            if (kingInCheck) {
+                onCheckmate?.invoke(white)
+            } else {
+                onStalemate?.invoke()
             }
         }
     }
@@ -601,7 +682,7 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
         return false
     }
 
-    // ============ ОТМЕНА ХОДА ============
+    // ============ ОТМЕНА / СБРОС ============
 
     private fun saveHistory() {
         history.add(
@@ -636,6 +717,7 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
         selectedRow = -1
         selectedCol = -1
         possibleMoves.clear()
+        gameOver = false
         updateCheckState()
         onTurnChanged?.invoke(whiteTurn)
         invalidate()
@@ -643,9 +725,6 @@ private fun addPawnMoves(moves: MutableList<Pair<Int, Int>>, row: Int, col: Int,
 
     fun resetGame() {
         setupInitialPosition()
-        selectedRow = -1
-        selectedCol = -1
-        possibleMoves.clear()
         onTurnChanged?.invoke(whiteTurn)
         invalidate()
     }
