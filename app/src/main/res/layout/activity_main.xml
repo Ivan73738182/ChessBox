@@ -1,25 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#1A1A1A"
-    android:gravity="center">
+    android:background="#1A1A1A">
+
+    <com.ivangames.chessbox.ChessBoardView
+        android:id="@+id/chessBoard"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <TextView
-        android:layout_width="wrap_content"
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="ChessBox"
+        android:layout_gravity="top"
+        android:text="Ход: белые"
         android:textColor="#FFFFFF"
-        android:textSize="32sp"
-        android:textStyle="bold" />
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:padding="16dp" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="♔ Доска скоро здесь ♚"
-        android:textColor="#AAAAAA"
-        android:textSize="18sp"
-        android:layout_marginTop="16dp" />
-
-</LinearLayout>
+</FrameLayout>
