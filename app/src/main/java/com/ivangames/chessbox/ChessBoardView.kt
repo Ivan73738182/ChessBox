@@ -553,7 +553,6 @@ fun makeAIMove() {
         animActive = true
     }
 
-    private var lastMovePiece: Char? = null
 
     // Вызывается, когда анимация дошла до конца
     private fun onAnimationComplete() {
