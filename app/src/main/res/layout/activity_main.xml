@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#1A1A1A">
@@ -9,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="50dp"
-        android:layout_marginBottom="60dp" />
+        android:layout_marginBottom="70dp" />
 
     <TextView
         android:id="@+id/statusText"
@@ -31,35 +32,41 @@
         android:padding="12dp"
         android:gravity="center">
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/undoBtn"
+            style="@style/RoundedButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="↶ Отмена"
+            android:textSize="14sp"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#555555"
+            app:backgroundTint="#555555"
             android:layout_marginEnd="4dp" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/newGameBtn"
+            style="@style/RoundedButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="🆕 Новая"
+            android:textSize="14sp"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#2E7D32"
+            app:backgroundTint="#2E7D32"
             android:layout_marginStart="4dp"
             android:layout_marginEnd="4dp" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/resetBtn"
+            style="@style/RoundedButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="🔄 Сброс"
+            android:textSize="14sp"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#8B0000"
+            app:backgroundTint="#8B0000"
             android:layout_marginStart="4dp" />
 
     </LinearLayout>
@@ -92,15 +99,14 @@
                 android:textStyle="bold"
                 android:gravity="center" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/newGameBtn2"
+                style="@style/RoundedButtonLarge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="НОВАЯ ИГРА"
-                android:textSize="18sp"
                 android:textColor="#FFFFFF"
-                android:backgroundTint="#2E7D32"
-                android:padding="16dp"
+                app:backgroundTint="#2E7D32"
                 android:layout_marginTop="32dp" />
 
         </LinearLayout>

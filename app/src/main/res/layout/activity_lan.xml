@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -16,26 +17,24 @@
         android:textStyle="bold"
         android:layout_marginBottom="40dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCreateGame"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="📡  СОЗДАТЬ ИГРУ"
-        android:textSize="18sp"
+        android:text="📡  Создать игру"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#2E7D32"
-        android:padding="20dp"
+        app:backgroundTint="#2E7D32"
         android:layout_marginBottom="16dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnJoinGame"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🔗  ПОДКЛЮЧИТЬСЯ"
-        android:textSize="18sp"
+        android:text="🔗  Подключиться"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#1565C0"
-        android:padding="20dp"
+        app:backgroundTint="#1565C0"
         android:layout_marginBottom="16dp" />
 
     <LinearLayout
@@ -56,29 +55,28 @@
             android:textSize="16sp"
             android:inputType="text"
             android:backgroundTint="#FFC107"
-            android:padding="12dp" />
+            android:padding="16dp" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConnect"
+            style="@style/RoundedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ПОДКЛЮЧИТЬСЯ К ХОСТУ"
+            android:text="Подключиться к хосту"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#6A1B9A"
-            android:layout_marginTop="8dp"
-            android:padding="16dp" />
+            app:backgroundTint="#6A1B9A"
+            android:layout_marginTop="12dp" />
 
     </LinearLayout>
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnBack"
+        style="@style/RoundedButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="←  НАЗАД"
-        android:textSize="16sp"
-        android:textColor="#AAAAAA"
-        android:backgroundTint="#333333"
-        android:padding="16dp"
+        android:text="←  Назад"
+        android:textColor="#FFFFFF"
+        app:backgroundTint="#333333"
         android:layout_marginTop="24dp" />
 
 </LinearLayout>

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -16,47 +17,43 @@
         android:textStyle="bold"
         android:layout_marginBottom="60dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnTwoPlayers"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="👥  ИГРАТЬ ВДВОЁМ"
-        android:textSize="18sp"
+        android:text="👥  Играть вдвоём"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#2E7D32"
-        android:padding="20dp"
+        app:backgroundTint="#2E7D32"
         android:layout_marginBottom="16dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnVsComputer"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🤖  ПРОТИВ КОМПЬЮТЕРА"
-        android:textSize="18sp"
+        android:text="🤖  Против компьютера"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#1565C0"
-        android:padding="20dp"
+        app:backgroundTint="#1565C0"
         android:layout_marginBottom="16dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnLan"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🌐  ИГРА ПО LAN"
-        android:textSize="18sp"
+        android:text="🌐  Игра по LAN"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#6A1B9A"
-        android:padding="20dp"
+        app:backgroundTint="#6A1B9A"
         android:layout_marginBottom="16dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSettings"
+        style="@style/RoundedButtonLarge"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚙️  НАСТРОЙКИ"
-        android:textSize="18sp"
+        android:text="⚙️  Настройки"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#555555"
-        android:padding="20dp" />
+        app:backgroundTint="#555555" />
 
 </LinearLayout>
